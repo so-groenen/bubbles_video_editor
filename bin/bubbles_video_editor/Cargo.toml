@@ -1,5 +1,5 @@
 [package]
-name = "video_modificator_gui"
+name = "bubbles_video_editor"
 version = "0.1.0"
 edition = "2024"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]

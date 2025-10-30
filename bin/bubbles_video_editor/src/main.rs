@@ -19,9 +19,7 @@ fn main() -> eframe::Result
             ),
         ..Default::default()
     };
-    eframe::run_native(
-        "Video Modificator GUI",
-        native_options,
-        Box::new(|cc| Ok(Box::new(video_modificator_gui::VideoModificator::new(cc)))),
+    eframe::run_native("bubbles_video_editor",native_options,
+        Box::new(|cc| Ok(Box::new(bubbles_video_editor::BubblesVideoEditor::new(cc)))),
     )
 }

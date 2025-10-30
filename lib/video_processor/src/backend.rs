@@ -57,17 +57,17 @@ pub fn process_video_thread(mut capture: videoio::VideoCapture,
         {
             let fourcc    = VideoWriter::fourcc('m', 'p', '4', 'v')?;
             let my_writer = VideoWriter::new(path_str, fourcc, video_info.fps, rescaled_frame_size.clone(), true).expect("Failed init writer!");
-            if my_writer.is_opened()?
-            {
-                worker_channels.send_open_status(true);
-                println!("[Worker] VideoWriter for \"{path_str}\" sucessfully opened");
-            }
-            else
-            {
-                worker_channels.send_open_status(false);
-                println!("Error opening VideoWriter for \"{path_str}\"");
-                return Ok(capture);
-            }
+            // if my_writer.is_opened()?
+            // {
+            //     worker_channels.send_open_status(true);
+            //     println!("[Worker] VideoWriter for \"{path_str}\" sucessfully opened");
+            // }
+            // else
+            // {
+            //     worker_channels.send_open_status(false);
+            //     println!("Error opening VideoWriter for \"{path_str}\"");
+            //     return Ok(capture);
+            // }
             Some(my_writer)
         }
         else

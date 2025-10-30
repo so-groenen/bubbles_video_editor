@@ -15,7 +15,7 @@ impl OpenCvRotationCode for RotateFlags
 
 pub fn get_video_name(file_path: &std::path::PathBuf, default: &str) -> String
 {
-    let default = OsString::from(default);
+    let default   = OsString::from(default);
     let file_name = file_path.file_name()
         .unwrap_or(&default)
         .to_str()
@@ -36,7 +36,7 @@ impl SizeEdit for opencv::core::Size
         if let Some(scale) = scale
         {
             self.height = (self.height as f32 * scale) as i32;
-            self.width =  (self.width as f32 * scale) as i32;
+            self.width  =  (self.width as f32 * scale) as i32;
         }
         self
     }    
@@ -98,23 +98,3 @@ pub fn decode_fourcc(fourcc_codec: u32) -> Option<(char, char, char, char)>
 
     return Some(video_codec);
 }
-
-// pub fn get_frame_size(capture: &videoio::VideoCapture, flip: Option<RotateFlags>) -> Size
-// {
-//     let frame_width: f64  = capture.get(videoio::CAP_PROP_FRAME_WIDTH).unwrap();
-//     let frame_height: f64 = capture.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap();
-//     let original_frame = Size {width: frame_width as i32, height: frame_height  as i32};
-//     let flipped_frame  = Size {width: frame_height as i32, height: frame_width  as i32};
-
-
-//     match flip 
-//     {
-//         Some(rotation) => match rotation
-//         {
-//             RotateFlags::ROTATE_180 => original_frame,
-//             _ => flipped_frame,
-//         }
-//         None => original_frame,
-//     }
-// }
- 

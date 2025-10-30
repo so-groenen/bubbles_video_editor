@@ -1,7 +1,7 @@
 [workspace]
 members = [
     # "bin/prototype", 
-    "bin/video_modificator_gui",
+    "bin/bubbles_video_editor",
     "lib/video_processor"
 ]
 resolver = "3"

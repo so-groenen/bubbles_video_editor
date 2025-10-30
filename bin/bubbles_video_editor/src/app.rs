@@ -107,7 +107,7 @@ fn create_default_edit_path(file_name: &std::path::PathBuf, placer_holder: &str)
     processed_file_path
 }
 
-pub struct VideoModificator 
+pub struct BubblesVideoEditor 
 {
     dropped_files: Vec<egui::DroppedFile>,
     label: String,
@@ -125,7 +125,7 @@ pub struct VideoModificator
     video_info_gui: VidInfoGui,
 }
  
-impl Default for VideoModificator 
+impl Default for BubblesVideoEditor 
 {
     fn default() -> Self 
     {
@@ -147,8 +147,10 @@ impl Default for VideoModificator
         }
     }
 }
+ 
 
-impl VideoModificator 
+
+impl BubblesVideoEditor 
 {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self 
     {
@@ -157,7 +159,7 @@ impl VideoModificator
     }
 }
 
-impl eframe::App for VideoModificator 
+impl eframe::App for BubblesVideoEditor 
 {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) 
     {
@@ -220,7 +222,7 @@ impl eframe::App for VideoModificator
                     self.app.try_grab_video(&file_path);
                     self.video_info_gui.try_update(&file_path, &self.app.video_info);
 
-                    if self.app.is_video_loaded()
+                    if self.app.has_video() //is_video_loaded()
                     {
                         self.edit_file_name   = create_default_edit_path(&file_path, "_edit");
                         self.edit_file_buffer = String::from(self.edit_file_name.to_str().expect("edit_file_buffer: Could not Path to &str."));
@@ -229,7 +231,7 @@ impl eframe::App for VideoModificator
                 }
 
 
-                if self.app.is_video_loaded()
+                if self.app.has_video()//.is_video_loaded()
                 {
                     ui.label("Video loaded successfully!");
                     self.has_tried_opening = false;
@@ -259,7 +261,7 @@ impl eframe::App for VideoModificator
             ui.heading("Video Editor:");
             ui.label("Rotate video:");
  
-            ui.add_enabled_ui(!self.app.has_launched_process() && self.app.is_video_loaded(), |ui|
+            ui.add_enabled_ui(!self.app.has_launched_process() && self.app.has_video(), |ui|// .is_video_loaded(), |ui|
             {
                 ui.horizontal(|ui|
                 {
