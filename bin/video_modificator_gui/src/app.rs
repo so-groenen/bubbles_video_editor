@@ -6,14 +6,14 @@ use video_processor::VideoProcessor;
 use video_processor::ProcessOptions;
 use video_processor::RotateFlags;
 
-const RESET_PROGRESS: f32       = 0f32;
-const NO_SCALE_CHANGE: f32      = 1f32;
-const QUARTER_SCALE_CHANGE: f32 = 0.25f32;
-const DOUBLE_SCALE_CHANGE: f32  = 2f32;
-const HALF_SCALE_CHANGE: f32    = 0.5f32;
+const RESET_PROGRESS: f32       = 0.0_f32;
+const NO_SCALE_CHANGE: f32      = 1.0_f32;
+const QUARTER_SCALE_CHANGE: f32 = 0.25_f32;
+const DOUBLE_SCALE_CHANGE: f32  = 2.0_f32;
+const HALF_SCALE_CHANGE: f32    = 0.5_f32;
 const VID_INFO_NAMES: [&'static str; 5] = ["• File name: ", "• Size: ", "• FourCC: ", "• FPS: ", "• Frame_counter "];
+const PLACE_HOLDER_FILELNAME: &str = "";
 
- 
 #[derive(Default, Debug)]
 struct VidInfoGui
 {
@@ -24,23 +24,19 @@ impl VidInfoGui
 {
     fn try_update(&mut self, file_path: &std::path::PathBuf, infos: &Option<VideoInfo>)
     {
-        match infos
+        self.has_some_info = infos.is_some();
+
+        if let Some(infos) = infos
         {
-            Some(infos) => 
-            {
-                self.has_some_info = true;
-                self.vid_info_result[0] = format!("{}", video_processor::get_video_name(file_path, "Video Capture"));//infos.file_name);
-                self.vid_info_result[1] = format!("{}x{}", infos.frame_size.width, infos.frame_size.height);
-                self.vid_info_result[2] = format!("{}{}{}{}", infos.fourcc_codec.0, infos.fourcc_codec.1, infos.fourcc_codec.2, infos.fourcc_codec.3);
-                self.vid_info_result[3] = format!("{:.1}", infos.fps );
-                self.vid_info_result[4] = format!("{}", infos.frame_count);
-            }
-            None => self.has_some_info = false
+            self.vid_info_result[0] = format!("{}", video_processor::get_video_name(file_path, "Video Capture"));//infos.file_name);
+            self.vid_info_result[1] = format!("{}x{}", infos.frame_size.width, infos.frame_size.height);
+            self.vid_info_result[2] = format!("{}{}{}{}", infos.fourcc_codec.0, infos.fourcc_codec.1, infos.fourcc_codec.2, infos.fourcc_codec.3);
+            self.vid_info_result[3] = format!("{:.1}", infos.fps );
+            self.vid_info_result[4] = format!("{}", infos.frame_count);
         };
     }    
     fn show_rows(&self, ui: &mut egui::Ui)
     {
-        // for i in 0..self.vid_info_result.len()
         for (info_name, info_result) in zip(VID_INFO_NAMES, &self.vid_info_result)
         {
             ui.label(info_name);
@@ -81,10 +77,10 @@ impl RotationRadio
     {
         match self 
         {
-            Self::First(value )  => *value,
-            Self::Second(value ) => *value,
-            Self::Third(value )  => *value,
-            Self::Forth(value )  => *value,
+            Self::First(value)  => *value,
+            Self::Second(value) => *value,
+            Self::Third(value)  => *value,
+            Self::Forth(value)  => *value,
         }
     }    
 }
@@ -94,7 +90,7 @@ fn create_default_edit_path(file_name: &std::path::PathBuf, placer_holder: &str)
     let default_directory = match std::env::current_dir()
     {
         Ok(cwd) => cwd,
-        Err(_) => std::path::PathBuf::from(""),
+        Err(_)  => std::path::PathBuf::from(""),
     };
 
     let parent    = file_name.parent().unwrap_or(&default_directory);
@@ -113,12 +109,13 @@ fn create_default_edit_path(file_name: &std::path::PathBuf, placer_holder: &str)
 
 pub struct VideoModificator 
 {
+    dropped_files: Vec<egui::DroppedFile>,
     label: String,
     edit_file_buffer: String,
     has_new_edit_file_name: bool,
     progress: f32,
     app: VideoProcessor,
-    file_name: std::path::PathBuf,
+    file_name: Option<std::path::PathBuf>,
     has_tried_opening: bool, 
     flip_choice: RotationRadio,
     process_mode: ProcessModes,
@@ -133,14 +130,14 @@ impl Default for VideoModificator
     fn default() -> Self 
     {
         Self {
-            edit_file_buffer: "".to_owned(),
-            label: "my_file.mp4".to_owned(),
+            dropped_files: Vec::<egui::DroppedFile>::default(),
+            edit_file_buffer: String::default(),
+            label: PLACE_HOLDER_FILELNAME.to_owned(),
             has_new_edit_file_name: false,
             progress: RESET_PROGRESS,
             app: VideoProcessor::default(),
-            file_name: std::path::PathBuf::default(),
+            file_name: None, 
             has_tried_opening: false,
-            // video_info: None,
             flip_choice: RotationRadio::First(None),
             process_mode: ProcessModes::PreviewOnly,
             gui_scale: QUARTER_SCALE_CHANGE,
@@ -162,10 +159,6 @@ impl VideoModificator
 
 impl eframe::App for VideoModificator 
 {
-    // /// Called by the framework to save state before shutdown.
-    // fn save(&mut self, storage: &mut dyn eframe::Storage) {
-    //     eframe::set_value(storage, eframe::APP_KEY, self);
-    // }
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) 
     {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| 
@@ -186,50 +179,64 @@ impl eframe::App for VideoModificator
 
         egui::CentralPanel::default().show(ctx, |ui| 
         {
-            ui.horizontal(|ui| 
+            ui.vertical(|ui| 
             {
                 ui.heading("Video file: ");
-                ui.text_edit_singleline(&mut self.label);
+                ui.label("Drag & drop into the app or use the file dialog!");
  
             });
 
             ui.horizontal(|ui| 
             {
-                if ui.button("Open").clicked()
+                // Use drag and drop ...
+                ui.text_edit_singleline(&mut self.label);
+                if !self.dropped_files.is_empty() 
                 {
-                    if let Err(opencv_err) = self.app.unload_video()
+                    let mut file = self.dropped_files.pop().unwrap(); 
+                    if let Some(path) = file.path.take()
+                    {
+                        self.file_name = Some(path)
+                    }   
+                }
+
+                // or file dialog!
+                if ui.button("Open file…").clicked() 
+                {
+                    if let Some(path) = rfd::FileDialog::new().pick_file() 
+                    {
+                        self.file_name = Some(path);
+                    }
+                }
+
+                if let Some(file_path) = self.file_name.take()
+                {
+                    if let Err(opencv_err) = self.app.unload_video() // release video if any
                     {
                         println!("Error Releasing video: {opencv_err}");
                     };
 
-                    self.has_tried_opening = true;
-                    if self.label.ends_with("\"") && self.label.starts_with("\"")
-                    {
-                        let trimmed_input = self.label.trim_matches('\"');
-                        self.file_name.set_file_name(&trimmed_input);
-                    }
-                    else {
-                        self.file_name.set_file_name(&self.label);
-                    }
+                    self.label = file_path.display().to_string();
 
-                    self.app.try_grab_video(&self.file_name);
-                    self.video_info_gui.try_update(&self.file_name,&self.app.video_info);
+                    self.app.try_grab_video(&file_path);
+                    self.video_info_gui.try_update(&file_path, &self.app.video_info);
 
                     if self.app.is_video_loaded()
                     {
-                        self.edit_file_name   = create_default_edit_path(&self.file_name, "_edit");
+                        self.edit_file_name   = create_default_edit_path(&file_path, "_edit");
                         self.edit_file_buffer = String::from(self.edit_file_name.to_str().expect("edit_file_buffer: Could not Path to &str."));
-                        // ui.label("Video loaded successfully!");
                     }
+                    self.has_tried_opening = true;
                 }
+
 
                 if self.app.is_video_loaded()
                 {
                     ui.label("Video loaded successfully!");
+                    self.has_tried_opening = false;
                 }
                 else if self.has_tried_opening 
                 {
-                    ui.label("No file found!");
+                    ui.label("Cannot open video file!");
                 }
                 else  
                 {
@@ -247,44 +254,43 @@ impl eframe::App for VideoModificator
                 self.video_info_gui.show_rows(ui);
             });
 
+            //// Video editor ///
             ui.separator();
             ui.heading("Video Editor:");
             ui.label("Rotate video:");
-            ui.horizontal(|ui|
+ 
+            ui.add_enabled_ui(!self.app.has_launched_process() && self.app.is_video_loaded(), |ui|
             {
-                ui.radio_value(&mut self.flip_choice, RotationRadio::First(None), "No Rotation");
-                ui.radio_value(&mut self.flip_choice, RotationRadio::Second(Some(RotateFlags::ROTATE_180)), "Rotate 180");
-                ui.radio_value(&mut self.flip_choice, RotationRadio::Third(Some(RotateFlags::ROTATE_90_CLOCKWISE)), "Rotate 90 Clockwise");
-                ui.radio_value(&mut self.flip_choice, RotationRadio::Forth(Some(RotateFlags::ROTATE_90_COUNTERCLOCKWISE)), "Rotate 90 Counter Clockwise");
-            });
-            ui.label("Scale changer");
-            ui.add(egui::Slider::new(&mut self.new_image_scale, 0.1..=2.0));
-            
-            ui.horizontal(|ui|
-            {
-                ui.label("Scale presets:");
-                if ui.button("0.25").clicked()
+                ui.horizontal(|ui|
                 {
-                    self.new_image_scale = QUARTER_SCALE_CHANGE;
-                }
-                if ui.button("0.5").clicked()
+                    ui.radio_value(&mut self.flip_choice, RotationRadio::First(None), "No Rotation");
+                    ui.radio_value(&mut self.flip_choice, RotationRadio::Second(Some(RotateFlags::ROTATE_180)), "Rotate 180");
+                    ui.radio_value(&mut self.flip_choice, RotationRadio::Third(Some(RotateFlags::ROTATE_90_CLOCKWISE)), "Rotate 90 Clockwise");
+                    ui.radio_value(&mut self.flip_choice, RotationRadio::Forth(Some(RotateFlags::ROTATE_90_COUNTERCLOCKWISE)), "Rotate 90 Counter Clockwise");
+                    
+                });
+                ui.label("Scale changer");
+                ui.add(egui::Slider::new(&mut self.new_image_scale, 0.1..=2.0));
+                ui.horizontal(|ui|
                 {
-                    self.new_image_scale = HALF_SCALE_CHANGE;
-                }
-                if ui.button("1.0").clicked()
-                {
-                    self.new_image_scale = NO_SCALE_CHANGE;
-                }
-                if ui.button("2.0").clicked()
-                {
-                    self.new_image_scale = DOUBLE_SCALE_CHANGE;
-                }
-            });
-            
-
-
-            if self.app.is_video_loaded()
-            {
+                    ui.label("Scale presets:");
+                    if ui.button("0.25").clicked()
+                    {
+                        self.new_image_scale = QUARTER_SCALE_CHANGE;
+                    }
+                    if ui.button("0.5").clicked()
+                    {
+                        self.new_image_scale = HALF_SCALE_CHANGE;
+                    }
+                    if ui.button("1.0").clicked()
+                    {
+                        self.new_image_scale = NO_SCALE_CHANGE;
+                    }
+                    if ui.button("2.0").clicked()
+                    {
+                        self.new_image_scale = DOUBLE_SCALE_CHANGE;
+                    }
+                });
                 ui.horizontal(|ui|
                 {
                     ui.label("Output path:");
@@ -294,8 +300,7 @@ impl eframe::App for VideoModificator
                     }
                     if ui.button("Set").clicked()
                     {
-                        // does not need to be option
-                        self.edit_file_name = std::path::PathBuf::from(&self.edit_file_buffer);
+                        self.edit_file_name         = std::path::PathBuf::from(&self.edit_file_buffer);
                         self.has_new_edit_file_name = false;
                     }
                     if self.has_new_edit_file_name
@@ -306,8 +311,10 @@ impl eframe::App for VideoModificator
                         ui.label("Set!")
                     }
                 });
-            }
+            });
 
+
+         
             ui.separator();
             ui.heading("Video Processor");
             egui::Grid::new("process_mode")
@@ -326,19 +333,18 @@ impl eframe::App for VideoModificator
 
             ui.horizontal(|ui|
             {
-                
                 if ui.add_enabled(self.app.has_video() && !self.app.has_launched_process(), egui::Button::new("Launch")).clicked()
                 {
                     let edit_file_name = self.edit_file_name.clone();
-                    let re_scale = match self.new_image_scale
+                    let re_scale       = match self.new_image_scale
                     {
                         NO_SCALE_CHANGE => None,
-                        _ =>               Some(self.new_image_scale)
+                        _               => Some(self.new_image_scale)
                     };
-                    let flip = self.flip_choice.get();
+                    let flip           = self.flip_choice.get();
                     let should_process = self.process_mode == ProcessModes::PreviewAndProcess;
-                    let preview= true;
-                    let gui_scale = self.gui_scale;
+                    let preview        = true;
+                    let gui_scale      = self.gui_scale;
                     let options = ProcessOptions
                     {
                         gui_scale,
@@ -348,7 +354,6 @@ impl eframe::App for VideoModificator
                         preview,
                         re_scale,
                     };
-
                     self.progress = RESET_PROGRESS;
                     self.app.dispatch_video_process(options);
                 }
@@ -362,15 +367,6 @@ impl eframe::App for VideoModificator
                     {
                         println!("Failure sending message!"); 
                     }
-                    // let have_transmitter  = self.app.try_abort().expect("Failed sending abort message even though we have a transmitter");
-                    // if have_transmitter 
-                    // {
-                    //     println!("GUI: Message sent!"); 
-                    // }
-                    // else
-                    // {
-                    //     println!(">> App (Main): Worker already returned, reciever destroyed"); 
-                    // }
                 }
                 if ui.add_enabled(self.app.has_video() && !self.app.has_launched_process(), egui::RadioButton::new(self.process_mode == ProcessModes::PreviewOnly, "Preview")).clicked()
                 {
@@ -394,74 +390,114 @@ impl eframe::App for VideoModificator
                 }
             });
 
-            // if self.app.has_launched_process()
-            // {
-            ui.horizontal(|ui|
+            if self.app.has_launched_process()
             {
-                ui.label("Gui scale:");
-                ui.add(egui::Slider::new(&mut self.gui_scale, 0.1..=2.0));
+                ui.horizontal(|ui|
+                {
+                    ui.label("Preview Window Size:");
+                    ui.add(egui::Slider::new(&mut self.gui_scale, 0.1..=2.0));
 
-                ui.label("Presets:");
-                if ui.button("0.25").clicked()
-                {
-                    self.gui_scale = QUARTER_SCALE_CHANGE;
-                }
-                if ui.button("0.5").clicked()
-                {
-                    self.gui_scale = HALF_SCALE_CHANGE;
-                }
-                if ui.button("1.0").clicked()
-                {
-                    self.gui_scale = NO_SCALE_CHANGE;
-                }
-                if ui.button("2.0").clicked()
-                {
-                    self.gui_scale = DOUBLE_SCALE_CHANGE;
-                }
-            });
+                    ui.label("Presets:");
+                    if ui.button("0.25").clicked()
+                    {
+                        self.gui_scale = QUARTER_SCALE_CHANGE;
+                    }
+                    if ui.button("0.5").clicked()
+                    {
+                        self.gui_scale = HALF_SCALE_CHANGE;
+                    }
+                    if ui.button("1.0").clicked()
+                    {
+                        self.gui_scale = NO_SCALE_CHANGE;
+                    }
+                    if ui.button("2.0").clicked()
+                    {
+                        self.gui_scale = DOUBLE_SCALE_CHANGE;
+                    }
+                });
 
-            // }
-            // if let Err(e) = self.app.set_gui_scale(self.gui_scale)
-            // {
-            //     println!("Error: {e}");
-            // }
-            self.app.set_gui_scale(self.gui_scale);
+            }
+            if let Err(e) = self.app.set_gui_scale(self.gui_scale)
+            {
+                println!("Error: {e}");
+            }
             if self.app.has_launched_process() && self.app.is_process_finished()
             {
                 match self.app.handle_thread_join()
                 {
-                    Ok(progress) => println!("Thread joined successfully final progress: {}%.", progress*100f32),
-                    Err(e) =>
+                    Ok(progress) => println!("Thread joined successfully final progress: {}%.", progress*100_f32),
+                    Err(e)       =>
                     { 
-                        // ui.label(format!("OpenCV Error while processing: {e}"));
                         println!("OpenCV Error in second thread: {e}")
                     },
                 } 
             }
 
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/main/",
-                "Source code."
-            ));
+            preview_files_being_dropped(ctx);
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
-                egui::warn_if_debug_build(ui);
+        // Collect dropped files:
+            ctx.input(|i| 
+            {
+                if !i.raw.dropped_files.is_empty() 
+                {
+                    self.dropped_files.clone_from(&i.raw.dropped_files);
+                }
             });
+
+            ui.horizontal(|ui|
+            {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.label("Powered by ");
+                ui.hyperlink_to("egui", "https://github.com/emilk/egui");
+            });
+            ui.hyperlink_to("Source code.","https://github.com/so-groenen/bubbles_video_editor");
         });
     }
 }
 
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
+ 
+
+
+
+/// See: https://github.com/emilk/egui/tree/main/examples/file_dialog !
+fn preview_files_being_dropped(ctx: &egui::Context) 
+{
+    use egui::{Align2, Color32, Id, LayerId, Order, TextStyle};
+    use std::fmt::Write as _;
+
+    if !ctx.input(|i| i.raw.hovered_files.is_empty()) 
+    {
+        let text = ctx.input(|i| 
+        {
+            let mut text = "Dropping file:\n".to_owned();
+            for file in &i.raw.hovered_files 
+            {
+                if let Some(path) = &file.path
+                {
+                    write!(text, "\n{}", path.file_name().unwrap().display()).ok();
+                }
+                else if !file.mime.is_empty() 
+                {
+                    write!(text, "\n{}", file.mime).ok();
+                } 
+                else 
+                {
+                    text += "\n???";
+                }
+            }
+            text
+        });
+
+        let painter = ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
+
+        let screen_rect = ctx.screen_rect();
+        painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
+        painter.text(
+            screen_rect.center(),
+            Align2::CENTER_CENTER,
+            text,
+            TextStyle::Heading.resolve(&ctx.style()),
+            Color32::WHITE,
         );
-        ui.label(".");
-    });
+    }
 }

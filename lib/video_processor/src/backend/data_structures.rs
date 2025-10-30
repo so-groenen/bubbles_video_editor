@@ -24,11 +24,11 @@ impl VideoInfo
         // name: &str,
         capture: &VideoCapture) -> Result<Self, opencv::Error>
     {
-        let frame_count =  capture.get(videoio::CAP_PROP_FRAME_COUNT)? as usize;
-        let fps   =  capture.get(videoio::CAP_PROP_FPS)? as f64;
-        let fourcc_codec =  capture.get(videoio::CAP_PROP_FOURCC)? as u32;
-        let height =  capture.get(videoio::CAP_PROP_FRAME_HEIGHT)? as i32;
-        let width =  capture.get(videoio::CAP_PROP_FRAME_WIDTH)? as i32;
+        let frame_count  = capture.get(videoio::CAP_PROP_FRAME_COUNT)? as usize;
+        let height       = capture.get(videoio::CAP_PROP_FRAME_HEIGHT)? as i32;
+        let width        = capture.get(videoio::CAP_PROP_FRAME_WIDTH)? as i32;
+        let fps          = capture.get(videoio::CAP_PROP_FPS)? as f64;
+        let fourcc_codec = capture.get(videoio::CAP_PROP_FOURCC)? as u32;
         let fourcc_codec = decode_fourcc(fourcc_codec).expect("FourCC cannot be negative");
         let frame_size = opencv::core::Size 
         {
@@ -62,7 +62,7 @@ impl Default for ProcessOptions
     fn default() -> Self {
         ProcessOptions
         {
-            gui_scale: 1f32,
+            gui_scale: 1_f32,
             edit_file_name: std::path::PathBuf::new(),
             flip: None,
             should_process: false,
@@ -72,15 +72,6 @@ impl Default for ProcessOptions
     }    
 }
 
-
-#[derive(Debug, Default)]
-pub struct MainThreadAsyncChannels
-{
-    pub rx_progression_from_thread: Option<mpsc::Receiver<f32>>,
-    pub tx_abort_signal_to_thread: Option<mpsc::Sender<bool>>,
-    pub rx_opening_failure: Option<mpsc::Receiver<bool>>,
-    pub tx_highgui_size_update: Option<mpsc::Sender<f32>>,
-}
 
 #[derive(Debug)]
 pub struct MainThreadAsyncChannelsNOPT
@@ -142,15 +133,4 @@ impl WorkerThreadAsyncChannels
     }
 }
 
-pub trait ResetChannels
-{
-    fn reset(&mut self);    
-}
-
-impl ResetChannels for MainThreadAsyncChannels
-{
-    fn reset(&mut self)
-    {
-        *self = Self::default()
-    }    
-}
+ 
