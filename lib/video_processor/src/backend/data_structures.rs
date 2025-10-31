@@ -1,12 +1,13 @@
-use opencv::core::RotateFlags;
+use opencv::core::{RotateFlags,Size_};
 use opencv::prelude::*;
 use opencv::{videoio::{self, VideoCapture}};
 use std::sync::mpsc::{self};
 use std::thread::{JoinHandle};
 pub type MyThreadPool2 = Vec<JoinHandle<Result<VideoCapture, opencv::Error>>>;
 use std::sync::mpsc::SendError;
-
-
+use std::ffi::OsString;
+use crate::backend::helper_function::*;
+ 
 #[derive(Debug, Default)]
 pub struct VideoInfo
 {
@@ -69,7 +70,27 @@ impl Default for ProcessOptions
         }
     }    
 }
-
+impl ProcessOptions
+{
+    pub fn get_edit_path_str(&self) -> &str
+    {
+        let mut path_str = self.edit_file_name.to_str().expect("Not empty");    
+        if path_str.ends_with("\"") && path_str.starts_with("\"")
+        {
+            path_str = path_str.trim_matches('\"');
+        }
+        path_str
+    }    
+    pub fn get_video_name(&self, default: &str) -> String
+    {
+        let default   = OsString::from(default);
+        let file_name = self.edit_file_name.file_name()
+            .unwrap_or(&default)
+            .to_str()
+            .expect("Failed converting OsString to &str");
+        String::from(file_name)
+    }
+}
 
 #[derive(Debug)]
 pub struct MainThreadAsyncChannels
@@ -77,6 +98,7 @@ pub struct MainThreadAsyncChannels
     pub rx_progression_from_thread: mpsc::Receiver<f32>,
     pub tx_abort_signal_to_thread: mpsc::Sender<bool>,
     pub tx_flip_update: mpsc::Sender<Option<RotateFlags>>,
+    pub tx_rescale_update: mpsc::Sender<f32>,
 
     // pub rx_open_status: mpsc::Receiver<bool>,        // Could be useful, maybe not?
     pub tx_highgui_size_update: mpsc::Sender<f32>,
@@ -101,6 +123,11 @@ impl MainThreadAsyncChannels
         self.tx_highgui_size_update.send(new_gui_size)?;
         Ok(())
     }
+    pub fn send_new_rescale(&self, new_rescale: f32) -> Result<(), SendError<f32>>
+    {
+        self.tx_rescale_update.send(new_rescale)?;
+        Ok(())
+    }
     pub fn send_new_flip(&self, new_flip: Option<RotateFlags>) -> Result<(), SendError<Option<RotateFlags>>>
     {
         self.tx_flip_update.send(new_flip)?;
@@ -115,6 +142,7 @@ pub struct WorkerThreadAsyncChannels
     pub tx_progression_to_main: mpsc::Sender<f32>,
     pub rx_abort_signal_from_main: mpsc::Receiver<bool>,
     pub rx_flip_update: mpsc::Receiver<Option<RotateFlags>>,
+    pub rx_rescale_update: mpsc::Receiver<f32>,
 
     // pub tx_open_status: mpsc::Sender<bool>,              // Could be useful, maybe not?
     pub rx_highgui_size_update: mpsc::Receiver<f32>,
@@ -125,6 +153,10 @@ impl WorkerThreadAsyncChannels
     pub fn get_last_size_update(&mut self) -> Option<f32>
     {
         self.rx_highgui_size_update.try_iter().last()
+    }    
+    pub fn get_rescale_update(&mut self) -> Option<f32>
+    {
+        self.rx_rescale_update.try_iter().last()
     }    
     pub fn get_updated_flip(&mut self) -> Option<Option<RotateFlags>>
     {
@@ -144,4 +176,76 @@ impl WorkerThreadAsyncChannels
     // }
 }
 
- 
+pub struct FrameSizeManager
+{
+    frame_size: Size_<i32>,
+    rescaled_frame_size: Size_<i32>,
+    rotated_rescaled_frame_size: Size_<i32>,
+    preview_frame_size: Size_<i32>,
+    gui_scale: f32,
+    re_scale: f32,
+    rotation: Option<RotateFlags>
+}
+impl FrameSizeManager
+{
+    pub fn new(frame_size: Size_<i32>, rotation: Option<RotateFlags>, gui_scale: f32, re_scale: f32) -> Self
+    {
+        let mut new_sizes = FrameSizeManager 
+        { 
+            frame_size,
+            rescaled_frame_size:         frame_size, 
+            rotated_rescaled_frame_size: frame_size, 
+            preview_frame_size:          frame_size, 
+            gui_scale,
+            re_scale,
+            rotation
+        };
+        new_sizes.resize_frame(re_scale); // will also rotate + rescale preview!
+        new_sizes
+    }
+    pub fn resize_frame(&mut self, new_rescale: f32)
+    {
+        self.re_scale            = new_rescale;
+        self.rescaled_frame_size = self.frame_size.get_resized(self.re_scale);
+        self.rotate(self.rotation);
+    }   
+    pub fn rotate(&mut self, flip: Option<RotateFlags>)
+    {
+        self.rotation                    = flip;
+        self.rotated_rescaled_frame_size = self.rescaled_frame_size.get_rotated(flip);
+        self.preview_frame_size          = self.rotated_rescaled_frame_size.get_resized(self.gui_scale);
+    }     
+    pub fn resize_gui(&mut self, new_gui_scale: f32)
+    {
+        self.gui_scale          = new_gui_scale;
+        self.preview_frame_size = self.rotated_rescaled_frame_size.get_resized(new_gui_scale);
+    }    
+    pub fn get_preview(&self) -> Size_<i32>
+    {
+        self.preview_frame_size
+    }
+    pub fn get_edit(&self) -> Size_<i32>
+    {
+        self.rotated_rescaled_frame_size
+    }
+    pub fn get_rotation(&self) -> Option<RotateFlags>
+    {
+        self.rotation
+    }
+    pub fn update_from_main(&mut self, worker_channels: &mut WorkerThreadAsyncChannels)
+    {
+        if let Some(new_gui_scale) = worker_channels.get_last_size_update()
+        {
+            self.resize_gui(new_gui_scale);
+        }            
+        if let Some(new_flip) = worker_channels.get_updated_flip()
+        {
+            self.rotate(new_flip);
+        }            
+        if let Some(new_scale) = worker_channels.get_rescale_update()
+        {
+            self.resize_frame(new_scale);
+        }       
+    }
+}
+

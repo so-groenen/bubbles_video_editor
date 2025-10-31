@@ -21,15 +21,11 @@ use std::sync::mpsc::SendError;
 #[derive(Debug)]
 pub struct VideoProcessor 
 {
-    // high_gui_size_ratio: i32,
     high_gui_scale: f32,
+    re_scale: f32,
     file_name: std::path::PathBuf,
-    // thread_pool: MyThreadPool,
-    // progression: f64,
     thread_pool: MyThreadPool2,
     my_video: Option<videoio::VideoCapture>,
-    // edited_video: Option<videoio::VideoCapture>,
-    // main_thread_async_channels: MainThreadAsyncChannels, // options(MainThreadAsyncChannels)??
     main_async_channels: Option<MainThreadAsyncChannels>,
     my_flip: Option<RotateFlags>,
     // is_video_loaded: bool,
@@ -42,17 +38,13 @@ impl Default for VideoProcessor
     {
         VideoProcessor
         {
-            // high_gui_size_ratio: 4i32,
             high_gui_scale: 0.25_f32,
+            re_scale: 1_f32,
             file_name: std::path::PathBuf::new(),
-            // progression: 0f64,
             thread_pool: MyThreadPool2::default(),
             my_video: None,
-            // edited_video: None,
-            // main_thread_async_channels: MainThreadAsyncChannels::default(),
             main_async_channels: None,
             my_flip: None,
-            // is_video_loaded: false,
             video_info: None, // We do not need the filename, we can let the GUI handle this
         }
     }
@@ -60,7 +52,7 @@ impl Default for VideoProcessor
 
 impl VideoProcessor 
 {
-    fn resize_gui(&self, scale: f32) //-> Result<(), SendError<f32>>
+    fn send_new_gui_size(&self, scale: f32) //-> Result<(), SendError<f32>>
     {
         self.main_async_channels.as_ref().inspect(|channels|
         {
@@ -74,6 +66,14 @@ impl VideoProcessor
         {
             channels.send_new_flip(flip)
                     .expect("Could not send flip");
+        });
+    }
+    fn send_rescale(&self, rescale: f32) //-> Result<(), SendError<f32>>
+    {
+        self.main_async_channels.as_ref().inspect(|channels|
+        {
+            channels.send_new_rescale(rescale)
+                    .expect("Could not send rescale");
         });
     }
     pub fn get_current_info(&self) -> Option<VideoInfo> 
@@ -97,12 +97,20 @@ impl VideoProcessor
     {
         if self.high_gui_scale != scale && self.has_launched_process() 
         {
-            self.resize_gui(scale);
+            self.send_new_gui_size(scale);
         }
         self.high_gui_scale = scale;
         Ok(())
     }
-    
+    pub fn set_rescale(&mut self, rescale: f32) -> Result<(), SendError<f32>> 
+    {
+        if self.re_scale != rescale && self.has_launched_process() 
+        {
+            self.send_rescale(rescale);
+        }
+        self.re_scale = rescale;
+        Ok(())
+    }
     pub fn set_flip(&mut self, flip: Option<RotateFlags>) -> Result<(), SendError<RotateFlags>> 
     {
         if self.my_flip != flip && self.has_launched_process() 
@@ -139,6 +147,7 @@ impl VideoProcessor
             let (tx_progression_to_main,    rx_progression_from_thread) = mpsc::channel();
             let (tx_abort_signal_to_thread, rx_abort_signal_from_main)  = mpsc::channel();
             let (tx_flip_update,            rx_flip_update)             = mpsc::channel();
+            let (tx_rescale_update,         rx_rescale_update)          = mpsc::channel();
             // let (tx_open_status,            rx_open_status)             = mpsc::channel();
             let (tx_highgui_size_update,    rx_highgui_size_update)     = mpsc::channel();
 
@@ -147,6 +156,7 @@ impl VideoProcessor
                 rx_progression_from_thread,
                 tx_abort_signal_to_thread,
                 tx_flip_update,
+                tx_rescale_update,
                 // rx_open_status,
                 tx_highgui_size_update,
             };
@@ -156,6 +166,7 @@ impl VideoProcessor
                 tx_progression_to_main,
                 rx_abort_signal_from_main,
                 rx_flip_update,
+                rx_rescale_update,
                 // tx_open_status,
                 rx_highgui_size_update,
             };

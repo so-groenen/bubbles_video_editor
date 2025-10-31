@@ -180,14 +180,10 @@ impl BubblesVideoEditor
 
     fn handle_file_opening(&mut self, ui: &mut egui::Ui)
     {
-        // ui.add_enabled_ui(!self.app.has_launched_process(), |ui|
-        // {
-        //     ui.text_edit_singleline(&mut self.label);
-        // });
-
         ui.add_enabled(!self.app.has_launched_process(), 
             egui::TextEdit::singleline(&mut self.label));
 
+        // Drag n drop ...
         if !self.dropped_files.is_empty() 
         {
             let mut file      = self.dropped_files.pop().unwrap(); 
@@ -205,13 +201,6 @@ impl BubblesVideoEditor
             }
         }
 
-        // if ui.button("Open file…").clicked() 
-        // {
-        //     if let Some(path) = rfd::FileDialog::new().pick_file() 
-        //     {
-        //         self.file_name = Some(path);
-        //     }
-        // }
     
         if let Some(file_path) = self.file_name.take()
         {
@@ -233,7 +222,7 @@ impl BubblesVideoEditor
             self.has_tried_opening = true;
         }
     
-        if self.app.has_video() // the video is moved to the thread!
+        if self.app.has_video()  
         {
             ui.label("Video loaded successfully!");
             self.has_tried_opening = false;
@@ -259,59 +248,65 @@ impl BubblesVideoEditor
             ui.radio_value(&mut self.flip_choice, RotationRadio::Second(Some(RotateFlags::ROTATE_180)), "Rotate 180");
             ui.radio_value(&mut self.flip_choice, RotationRadio::Third(Some(RotateFlags::ROTATE_90_CLOCKWISE)), "Rotate 90 Clockwise");
             ui.radio_value(&mut self.flip_choice, RotationRadio::Forth(Some(RotateFlags::ROTATE_90_COUNTERCLOCKWISE)), "Rotate 90 Counter Clockwise");
-            if self.process_mode == ProcessModes::PreviewOnly
+        });
+        // ui.add_enabled_ui(!self.app.has_launched_process() && self.app.has_video(), |ui|// .is_video_loaded(), |ui|
+        // {
+        ui.label("Scale changer");
+        ui.add(egui::Slider::new(&mut self.new_image_scale, 0.1..=2.0));
+        ui.horizontal(|ui|
+        {
+            ui.label("Scale presets:");
+            if ui.button("0.25").clicked()
             {
-                if let Err(e) = self.app.set_flip(self.flip_choice.get())
-                {
-                    println!("Error: {e}");
-                }
+                self.new_image_scale = QUARTER_SCALE_CHANGE;
+            }
+            if ui.button("0.5").clicked()
+            {
+                self.new_image_scale = HALF_SCALE_CHANGE;
+            }
+            if ui.button("1.0").clicked()
+            {
+                self.new_image_scale = NO_SCALE_CHANGE;
+            }
+            if ui.button("2.0").clicked()
+            {
+                self.new_image_scale = DOUBLE_SCALE_CHANGE;
             }
         });
-        ui.add_enabled_ui(!self.app.has_launched_process() && self.app.has_video(), |ui|// .is_video_loaded(), |ui|
+        ui.horizontal(|ui|
         {
-            ui.label("Scale changer");
-            ui.add(egui::Slider::new(&mut self.new_image_scale, 0.1..=2.0));
-            ui.horizontal(|ui|
+            ui.label("Output path:");
+            if ui.text_edit_singleline(&mut self.edit_file_buffer).changed()
             {
-                ui.label("Scale presets:");
-                if ui.button("0.25").clicked()
-                {
-                    self.new_image_scale = QUARTER_SCALE_CHANGE;
-                }
-                if ui.button("0.5").clicked()
-                {
-                    self.new_image_scale = HALF_SCALE_CHANGE;
-                }
-                if ui.button("1.0").clicked()
-                {
-                    self.new_image_scale = NO_SCALE_CHANGE;
-                }
-                if ui.button("2.0").clicked()
-                {
-                    self.new_image_scale = DOUBLE_SCALE_CHANGE;
-                }
-            });
-            ui.horizontal(|ui|
+                self.has_new_edit_file_name = true;
+            }
+            if ui.button("Set").clicked()
             {
-                ui.label("Output path:");
-                if ui.text_edit_singleline(&mut self.edit_file_buffer).changed()
-                {
-                    self.has_new_edit_file_name = true;
-                }
-                if ui.button("Set").clicked()
-                {
-                    self.edit_file_name         = std::path::PathBuf::from(&self.edit_file_buffer);
-                    self.has_new_edit_file_name = false;
-                }
-                if self.has_new_edit_file_name
-                {
-                    ui.label("path not set!")    
-                }
-                else {
-                    ui.label("Set!")
-                }
-            });
+                self.edit_file_name         = std::path::PathBuf::from(&self.edit_file_buffer);
+                self.has_new_edit_file_name = false;
+            }
+            if self.has_new_edit_file_name
+            {
+                ui.label("path not set!")    
+            }
+            else {
+                ui.label("Set!")
+            }
         });
+        // });
+
+        // This will dispatch new values to the processing thread, if process is launched!
+        if self.process_mode == ProcessModes::PreviewOnly
+        {
+            if let Err(e) = self.app.set_flip(self.flip_choice.get())
+            {
+                println!("Error: {e}");
+            }
+            if let Err(e) = self.app.set_rescale(self.new_image_scale)
+            {
+                println!("Error: {e}");
+            }
+        }
     }
         
     fn show_video_info(&mut self, ui: &mut egui::Ui)
@@ -466,6 +461,7 @@ impl eframe::App for BubblesVideoEditor
             ui.heading("Video infos:");
             self.show_video_info(ui);
 
+            
             //// Video editor ///
             ui.separator();
             ui.heading("Video Editor:");
