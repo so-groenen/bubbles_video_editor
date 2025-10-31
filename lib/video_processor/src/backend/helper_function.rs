@@ -28,6 +28,7 @@ pub trait SizeEdit
     fn resize(&mut self, scale: Option<f32>) -> &mut Self;
     fn get_resized(&self, scale: f32) -> Self;
     fn rotate(&mut self, rotation: Option<RotateFlags>) -> &mut Self;
+    fn get_rotated(&self, rotation: Option<RotateFlags>) -> Self ;
 }
 impl SizeEdit for opencv::core::Size
 {
@@ -63,6 +64,13 @@ impl SizeEdit for opencv::core::Size
         }
         self
     }
+    fn get_rotated(&self, rotation: Option<RotateFlags>) -> Self 
+    {
+        let mut new_size = Size {width: self.width, height: self.height};
+        new_size.rotate(rotation);
+        new_size
+    }
+    
 }
 // fourcc = Four Character Code (ex: "DivX", "Xvid", "mp4a")
 // fourcc example [12345678][09876543][32745186][62137854]

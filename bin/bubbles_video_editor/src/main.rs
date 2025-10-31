@@ -19,7 +19,7 @@ fn main() -> eframe::Result
             ),
         ..Default::default()
     };
-    eframe::run_native("bubbles_video_editor",native_options,
+    eframe::run_native("Bubbles Video Editor",native_options,
         Box::new(|cc| Ok(Box::new(bubbles_video_editor::BubblesVideoEditor::new(cc)))),
     )
 }

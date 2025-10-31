@@ -60,12 +60,20 @@ impl Default for VideoProcessor
 
 impl VideoProcessor 
 {
-    pub fn resize_gui(&self, scale: f32) //-> Result<(), SendError<f32>>
+    fn resize_gui(&self, scale: f32) //-> Result<(), SendError<f32>>
     {
         self.main_async_channels.as_ref().inspect(|channels|
         {
             channels.send_new_gui_size(scale)
                     .expect("Could not send resize gui");
+        });
+    }
+    fn send_new_flip(&self, flip: Option<RotateFlags>) //-> Result<(), SendError<f32>>
+    {
+        self.main_async_channels.as_ref().inspect(|channels|
+        {
+            channels.send_new_flip(flip)
+                    .expect("Could not send flip");
         });
     }
     pub fn get_current_info(&self) -> Option<VideoInfo> 
@@ -89,17 +97,22 @@ impl VideoProcessor
     {
         if self.high_gui_scale != scale && self.has_launched_process() 
         {
-            self.high_gui_scale = scale;
             self.resize_gui(scale);
         }
         self.high_gui_scale = scale;
         Ok(())
     }
-
-    pub fn set_flip(&mut self, flip: Option<RotateFlags>)
+    
+    pub fn set_flip(&mut self, flip: Option<RotateFlags>) -> Result<(), SendError<RotateFlags>> 
     {
+        if self.my_flip != flip && self.has_launched_process() 
+        {
+            self.send_new_flip(flip);
+        }
         self.my_flip = flip;
+        Ok(())
     }
+
     pub fn try_grab_video(&mut self, file_name: &std::path::PathBuf) -> bool
     {
         self.my_video = load_video_from_file(&file_name);
@@ -117,7 +130,7 @@ impl VideoProcessor
     }
     pub fn has_video(&self) -> bool 
     {
-        self.my_video.is_some()
+        self.my_video.is_some() || self.has_launched_process()
     }
     pub fn dispatch_video_process(&mut self, options: ProcessOptions) -> bool
     {
@@ -125,6 +138,7 @@ impl VideoProcessor
         {
             let (tx_progression_to_main,    rx_progression_from_thread) = mpsc::channel();
             let (tx_abort_signal_to_thread, rx_abort_signal_from_main)  = mpsc::channel();
+            let (tx_flip_update,            rx_flip_update)             = mpsc::channel();
             // let (tx_open_status,            rx_open_status)             = mpsc::channel();
             let (tx_highgui_size_update,    rx_highgui_size_update)     = mpsc::channel();
 
@@ -132,6 +146,7 @@ impl VideoProcessor
             {
                 rx_progression_from_thread,
                 tx_abort_signal_to_thread,
+                tx_flip_update,
                 // rx_open_status,
                 tx_highgui_size_update,
             };
@@ -140,6 +155,7 @@ impl VideoProcessor
             {
                 tx_progression_to_main,
                 rx_abort_signal_from_main,
+                rx_flip_update,
                 // tx_open_status,
                 rx_highgui_size_update,
             };

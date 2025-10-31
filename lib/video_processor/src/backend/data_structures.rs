@@ -76,6 +76,8 @@ pub struct MainThreadAsyncChannels
 {
     pub rx_progression_from_thread: mpsc::Receiver<f32>,
     pub tx_abort_signal_to_thread: mpsc::Sender<bool>,
+    pub tx_flip_update: mpsc::Sender<Option<RotateFlags>>,
+
     // pub rx_open_status: mpsc::Receiver<bool>,        // Could be useful, maybe not?
     pub tx_highgui_size_update: mpsc::Sender<f32>,
 }
@@ -99,6 +101,11 @@ impl MainThreadAsyncChannels
         self.tx_highgui_size_update.send(new_gui_size)?;
         Ok(())
     }
+    pub fn send_new_flip(&self, new_flip: Option<RotateFlags>) -> Result<(), SendError<Option<RotateFlags>>>
+    {
+        self.tx_flip_update.send(new_flip)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -107,6 +114,8 @@ pub struct WorkerThreadAsyncChannels
 {
     pub tx_progression_to_main: mpsc::Sender<f32>,
     pub rx_abort_signal_from_main: mpsc::Receiver<bool>,
+    pub rx_flip_update: mpsc::Receiver<Option<RotateFlags>>,
+
     // pub tx_open_status: mpsc::Sender<bool>,              // Could be useful, maybe not?
     pub rx_highgui_size_update: mpsc::Receiver<f32>,
 }
@@ -116,6 +125,10 @@ impl WorkerThreadAsyncChannels
     pub fn get_last_size_update(&mut self) -> Option<f32>
     {
         self.rx_highgui_size_update.try_iter().last()
+    }    
+    pub fn get_updated_flip(&mut self) -> Option<Option<RotateFlags>>
+    {
+        self.rx_flip_update.try_iter().last()
     }    
     pub fn send_progression(&self, progression: f32)
     {
