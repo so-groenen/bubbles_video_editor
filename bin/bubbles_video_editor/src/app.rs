@@ -1,7 +1,13 @@
-use std::ffi::OsStr;
-use std::iter::zip;
  
-use video_processor::VideoInfo;
+mod edit_file; 
+mod video_info; 
+mod rotation_radio; 
+mod video_modes; 
+use edit_file::EditFile;
+use video_info::VidInfoGui;
+use rotation_radio::RotationRadio;
+use video_modes::VideoMode;
+
 use video_processor::VideoProcessor;
 use video_processor::ProcessOptions;
 use video_processor::RotateFlags;
@@ -11,142 +17,38 @@ const NO_SCALE_CHANGE: f32      = 1.0_f32;
 const QUARTER_SCALE_CHANGE: f32 = 0.25_f32;
 const DOUBLE_SCALE_CHANGE: f32  = 2.0_f32;
 const HALF_SCALE_CHANGE: f32    = 0.5_f32;
-const VID_INFO_NAMES: [&'static str; 5] = ["• File name: ", "• Size: ", "• FourCC: ", "• FPS: ", "• Duration: "];
-const PLACE_HOLDER_FILELNAME: &str = "";
+
+const MP4_EXTENSIONS:   [&'static str; 1] = ["mp4"];
+const PLACE_HOLDER_FILELNAME: &str        = "";
 
 
-#[derive(Default, Debug)]
-struct VidInfoGui
-{
-    has_some_info: bool,
-    vid_info_result: [String; 5],
-}
-impl VidInfoGui
-{
-    fn try_update(&mut self, file_path: &std::path::PathBuf, infos: &Option<VideoInfo>)
-    {
-        self.has_some_info = infos.is_some();
-
-        if let Some(infos) = infos
-        {
-            self.vid_info_result[0] = format!("{}", video_processor::get_video_name(file_path, "Video Capture"));//infos.file_name);
-            self.vid_info_result[1] = format!("{}x{}", infos.frame_size.width, infos.frame_size.height);
-            self.vid_info_result[2] = format!("{}{}{}{}", infos.fourcc_codec.0, infos.fourcc_codec.1, infos.fourcc_codec.2, infos.fourcc_codec.3);
-            self.vid_info_result[3] = format!("{:.1}", infos.fps );
-            let total_secs   = (infos.frame_count as f64 / infos.fps) as u64;
-            let min          = total_secs / 60_u64;
-            let reminder_sec = total_secs % 60_u64;
-            self.vid_info_result[4] = format!("{:.1}min {:.1}s", min, reminder_sec);
-        };
-    }    
-    fn show_rows(&self, ui: &mut egui::Ui)
-    {
-        for (info_name, info_result) in zip(VID_INFO_NAMES, &self.vid_info_result)
-        {
-            ui.label(info_name);
-            if self.has_some_info
-            {
-                ui.label(info_result);
-            }
-            else 
-            {
-                ui.label("");
-            }
-            ui.end_row();
-        }
-    }
-}
-
- 
- 
 #[derive(PartialEq)]
-enum RotationRadio
-{
-    First(Option<RotateFlags>),
-    Second(Option<RotateFlags>),
-    Third(Option<RotateFlags>),
-    Forth(Option<RotateFlags>),
-}
-#[derive(PartialEq)]
-
 enum ProcessModes
 {
     PreviewOnly,
     PreviewAndProcess    
 }
-
-impl RotationRadio 
-{
-    fn get(&self) -> Option<RotateFlags>
-    {
-        match self 
-        {
-            Self::First(value)  => *value,
-            Self::Second(value) => *value,
-            Self::Third(value)  => *value,
-            Self::Forth(value)  => *value,
-        }
-    }    
-}
-
-fn create_default_edit_path(file_name: &std::path::PathBuf, placer_holder: &str) -> std::path::PathBuf
-{
-    let default_directory = match std::env::current_dir()
-    {
-        Ok(cwd) => cwd,
-        Err(_)  => std::path::PathBuf::from(""),
-    };
-
-    let parent    = file_name.parent().unwrap_or(&default_directory);
-    let extension = file_name.extension().unwrap_or(OsStr::new("no_extension"));
-    let mut new_file_stem = file_name.file_stem().unwrap_or(OsStr::new("empty_file_name")).to_owned();
-
-    println!("DEBUG: Filename {}", new_file_stem.to_str().expect("String not empty"));
-    println!("DEBUG: extension {}", extension.to_str().expect("String not empty"));
-    new_file_stem.push(placer_holder);
-    
-    let mut processed_file_path = parent.join(new_file_stem);
-    processed_file_path.set_extension(extension);
-
-    processed_file_path
-}
-
-enum VideoMode
-{
-    Play(&'static str),
-    Pause(&'static str),
-}
-impl VideoMode
-{
-    const PLAY: VideoMode = VideoMode::Play("Play");
-    const PAUSE: VideoMode = VideoMode::Pause("Pause");
-    fn get_name(&self) -> &'static str 
-    {
-        match self
-        {
-            VideoMode::Pause(s) => s,
-            VideoMode::Play(s) => s,
-        }
-    }    
-}
-
-
-
+  
 pub struct BubblesVideoEditor 
 {
-    dropped_files: Vec<egui::DroppedFile>,
-    label: String,
-    edit_file_buffer: String,
-    has_new_edit_file_name: bool,
-    progress: f32,
+    // Our app:
     app: VideoProcessor,
+    
+    // file data:
     file_name: Option<std::path::PathBuf>,
+    edit_file: EditFile,
+    dropped_files: Vec<egui::DroppedFile>,
+    opened_file_str: String,
+
+    // helper
+    progress: f32,
     has_tried_opening: bool, 
+    
+    //user choice for processing: 
     flip_choice: RotationRadio,
     process_mode: ProcessModes,
     gui_scale: f32,
     new_image_scale: f32,
-    edit_file_name: std::path::PathBuf,
     video_info_gui: VidInfoGui,
     next_video_mode: VideoMode,
 }
@@ -155,20 +57,22 @@ impl Default for BubblesVideoEditor
 {
     fn default() -> Self 
     {
-        Self {
-            dropped_files: Vec::<egui::DroppedFile>::default(),
-            edit_file_buffer: String::default(),
-            label: PLACE_HOLDER_FILELNAME.to_owned(),
-            has_new_edit_file_name: false,
-            progress: RESET_PROGRESS,
+        Self 
+        {
             app: VideoProcessor::default(),
+            
+            dropped_files: Vec::<egui::DroppedFile>::default(),
             file_name: None, 
+            edit_file: EditFile::default(),
+            opened_file_str: PLACE_HOLDER_FILELNAME.to_owned(),
+
+            progress: RESET_PROGRESS,
             has_tried_opening: false,
+            
             flip_choice: RotationRadio::First(None),
             process_mode: ProcessModes::PreviewOnly,
             gui_scale: QUARTER_SCALE_CHANGE,
             new_image_scale: NO_SCALE_CHANGE,
-            edit_file_name: std::path::PathBuf::default(), // could be a "new pathbuff...",
             video_info_gui: VidInfoGui::default(),
             next_video_mode: VideoMode::PAUSE,
         }
@@ -208,7 +112,7 @@ impl BubblesVideoEditor
     fn handle_file_opening(&mut self, ui: &mut egui::Ui)
     {
         ui.add_enabled(!self.app.has_launched_process(), 
-            egui::TextEdit::singleline(&mut self.label));
+            egui::TextEdit::singleline(&mut self.opened_file_str));
 
         // Drag n drop ...
         if !self.dropped_files.is_empty() 
@@ -236,15 +140,14 @@ impl BubblesVideoEditor
                 println!("Error Releasing video: {opencv_err}");
             };
     
-            self.label = file_path.display().to_string();
+            self.opened_file_str = file_path.display().to_string();
     
             self.app.try_grab_video(&file_path);
             self.video_info_gui.try_update(&file_path, &self.app.video_info);
     
-            if self.app.has_video() //is_video_loaded()
+            if self.app.has_video()
             {
-                self.edit_file_name   = create_default_edit_path(&file_path, "_edit");
-                self.edit_file_buffer = String::from(self.edit_file_name.to_str().expect("edit_file_buffer: Could not Path to &str."));
+                self.edit_file = EditFile::new(&file_path, "_edit");
             }
             self.has_tried_opening = true;
         }
@@ -302,23 +205,23 @@ impl BubblesVideoEditor
         });
         ui.horizontal(|ui|
         {
-            ui.label("Output path:");
-            if ui.text_edit_singleline(&mut self.edit_file_buffer).changed()
+            ui.add_enabled_ui(self.app.has_video(), |ui|
             {
-                self.has_new_edit_file_name = true;
-            }
-            if ui.button("Set").clicked()
-            {
-                self.edit_file_name         = std::path::PathBuf::from(&self.edit_file_buffer);
-                self.has_new_edit_file_name = false;
-            }
-            if self.has_new_edit_file_name
-            {
-                ui.label("path not set!")    
-            }
-            else {
-                ui.label("Set!")
-            }
+                ui.label("Output path:");
+                if ui.text_edit_singleline(self.edit_file.get_buffer()).lost_focus()
+                {
+                    self.edit_file.update_from_buffer();
+                }
+                 
+                if ui.button("Set output file").clicked() 
+                {
+                    if let Some(path) = rfd::FileDialog::new().set_file_name(self.edit_file.get_name()).add_filter("Video Format", &MP4_EXTENSIONS) .save_file() 
+                    {
+                        self.edit_file.update_from_path(path);    
+                    }
+                }
+            });
+            
         });
         // });
 
@@ -366,7 +269,7 @@ impl BubblesVideoEditor
         {
             if ui.add_enabled(self.app.has_video() && !self.app.has_launched_process(), egui::Button::new("Launch")).clicked()
             {
-                let edit_file_name = self.edit_file_name.clone();
+                let edit_file_path = self.edit_file.get_path().clone();
                 let re_scale       = match self.new_image_scale
                 {
                     NO_SCALE_CHANGE => None,
@@ -379,7 +282,7 @@ impl BubblesVideoEditor
                 let options = ProcessOptions
                 {
                     gui_scale,
-                    edit_file_name,
+                    edit_file_path,
                     flip,
                     should_process,
                     preview,

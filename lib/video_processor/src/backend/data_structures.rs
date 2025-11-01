@@ -55,7 +55,7 @@ impl VideoInfo
 pub struct ProcessOptions
 {
     pub gui_scale: f32,
-    pub edit_file_name: std::path::PathBuf,
+    pub edit_file_path: std::path::PathBuf,
     pub flip: Option<RotateFlags>,
     pub should_process: bool,
     pub preview: bool,
@@ -68,7 +68,7 @@ impl Default for ProcessOptions
         ProcessOptions
         {
             gui_scale: 1_f32,
-            edit_file_name: std::path::PathBuf::new(),
+            edit_file_path: std::path::PathBuf::new(),
             flip: None,
             should_process: false,
             preview: true,
@@ -80,7 +80,7 @@ impl ProcessOptions
 {
     pub fn get_edit_path_str(&self) -> &str
     {
-        let mut path_str = self.edit_file_name.to_str().expect("Not empty");    
+        let mut path_str = self.edit_file_path.to_str().expect("Not empty");    
         if path_str.ends_with("\"") && path_str.starts_with("\"")
         {
             path_str = path_str.trim_matches('\"');
@@ -90,7 +90,7 @@ impl ProcessOptions
     pub fn get_video_name(&self, default: &str) -> String
     {
         let default   = OsString::from(default);
-        let file_name = self.edit_file_name.file_name()
+        let file_name = self.edit_file_path.file_name()
             .unwrap_or(&default)
             .to_str()
             .expect("Failed converting OsString to &str");
