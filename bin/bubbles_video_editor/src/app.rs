@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::iter::zip;
 
+use eframe::glow::MIN;
 use video_processor::VideoInfo;
 use video_processor::VideoProcessor;
 use video_processor::ProcessOptions;
@@ -11,7 +12,7 @@ const NO_SCALE_CHANGE: f32      = 1.0_f32;
 const QUARTER_SCALE_CHANGE: f32 = 0.25_f32;
 const DOUBLE_SCALE_CHANGE: f32  = 2.0_f32;
 const HALF_SCALE_CHANGE: f32    = 0.5_f32;
-const VID_INFO_NAMES: [&'static str; 5] = ["• File name: ", "• Size: ", "• FourCC: ", "• FPS: ", "• Frame_counter "];
+const VID_INFO_NAMES: [&'static str; 5] = ["• File name: ", "• Size: ", "• FourCC: ", "• FPS: ", "• Duration: "];
 const PLACE_HOLDER_FILELNAME: &str = "";
 
 #[derive(Default, Debug)]
@@ -32,7 +33,10 @@ impl VidInfoGui
             self.vid_info_result[1] = format!("{}x{}", infos.frame_size.width, infos.frame_size.height);
             self.vid_info_result[2] = format!("{}{}{}{}", infos.fourcc_codec.0, infos.fourcc_codec.1, infos.fourcc_codec.2, infos.fourcc_codec.3);
             self.vid_info_result[3] = format!("{:.1}", infos.fps );
-            self.vid_info_result[4] = format!("{}", infos.frame_count);
+            let total_secs   = (infos.frame_count as f64 / infos.fps) as u64;
+            let min          = total_secs / 60_u64;
+            let reminder_sec = total_secs % 60_u64;
+            self.vid_info_result[4] = format!("{:.1}min {:.1}s", min, reminder_sec);
         };
     }    
     fn show_rows(&self, ui: &mut egui::Ui)

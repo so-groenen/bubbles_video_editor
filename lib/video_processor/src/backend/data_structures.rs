@@ -1,13 +1,13 @@
 use opencv::core::{RotateFlags,Size_};
 use opencv::prelude::*;
-use opencv::{videoio::{self, VideoCapture}};
+use opencv::{videoio::{self, VideoCapture}, highgui};
 use std::sync::mpsc::{self};
 use std::thread::{JoinHandle};
 pub type MyThreadPool2 = Vec<JoinHandle<Result<VideoCapture, opencv::Error>>>;
 use std::sync::mpsc::SendError;
 use std::ffi::OsString;
 use crate::backend::helper_function::*;
- 
+
 #[derive(Debug, Default)]
 pub struct VideoInfo
 {
@@ -176,6 +176,13 @@ impl WorkerThreadAsyncChannels
     // }
 }
 
+pub enum UpdatedFrameSize
+{
+    NewGUiScale,
+    NewRescale,
+    NewRotation,
+}
+
 pub struct FrameSizeManager
 {
     frame_size: Size_<i32>,
@@ -232,20 +239,77 @@ impl FrameSizeManager
     {
         self.rotation
     }
-    pub fn update_from_main(&mut self, worker_channels: &mut WorkerThreadAsyncChannels)
+    pub fn update_gui_size(&mut self, worker_channels: &mut WorkerThreadAsyncChannels) -> bool
     {
+ 
         if let Some(new_gui_scale) = worker_channels.get_last_size_update()
         {
             self.resize_gui(new_gui_scale);
+            return true;
         }            
+        false
+    }
+    pub fn update_flip(&mut self, worker_channels: &mut WorkerThreadAsyncChannels) -> bool
+    {
+ 
         if let Some(new_flip) = worker_channels.get_updated_flip()
         {
             self.rotate(new_flip);
-        }            
+            return true
+        }       
+        false
+    }
+    pub fn update_rescale(&mut self, worker_channels: &mut WorkerThreadAsyncChannels) -> bool
+    {
+ 
         if let Some(new_scale) = worker_channels.get_rescale_update()
         {
             self.resize_frame(new_scale);
+            return true;
         }       
+        false
+    }
+    pub fn update_from_main(&mut self, worker_channels: &mut WorkerThreadAsyncChannels) -> bool
+    {
+        self.update_flip(worker_channels) || self.update_gui_size(worker_channels) || self.update_rescale(worker_channels)
     }
 }
 
+
+pub struct HighGuiWindow
+{
+    winname: String,
+}
+impl HighGuiWindow
+{
+    pub fn build(winname: String, mode: i32) -> Result<HighGuiWindow,opencv::Error>
+    {
+        highgui::named_window(&winname[..], mode)?;
+        Ok(Self { winname })
+    }    
+    pub fn show(&self,  mat: &impl opencv::core::ToInputArray) -> Result<(),opencv::Error>
+    {
+        highgui::imshow(self.winname.as_str(), mat)?; 
+        Ok(())
+    }
+    pub fn resize(&mut self, size: opencv::core::Size)-> Result<(),opencv::Error>
+    {
+        highgui::resize_window_size(self.winname.as_str(), size)?;
+        Ok(())
+    }
+    // Trick from https://stackoverflow.com/a/9321629
+    pub fn is_open(&self) -> bool
+    {
+        highgui::get_window_property(self.winname.as_str(), highgui::WindowPropertyFlags::WND_PROP_FULLSCREEN.into()).is_ok()
+    }
+}
+impl Drop for HighGuiWindow
+{
+    fn drop(&mut self) 
+    {
+        if self.is_open()
+        {
+            let _ = highgui::destroy_window(self.winname.as_str());
+        }
+    }    
+}
