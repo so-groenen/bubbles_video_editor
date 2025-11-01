@@ -3,15 +3,21 @@ use opencv::prelude::*;
 use opencv::{videoio::{self, VideoCapture}, highgui};
 use std::sync::mpsc::{self};
 use std::thread::{JoinHandle};
-pub type MyThreadPool2 = Vec<JoinHandle<Result<VideoCapture, opencv::Error>>>;
+pub type VideoProcThreadPool = Vec<JoinHandle<Result<VideoCapture, opencv::Error>>>;
 use std::sync::mpsc::SendError;
 use std::ffi::OsString;
 use crate::backend::helper_function::*;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum VideoModes
+{
+    Play,
+    Pause,
+}
+
 #[derive(Debug, Default)]
 pub struct VideoInfo
 {
-    // pub file_name: String,
     pub frame_size: opencv::core::Size,
     pub frame_count: usize,
     pub fourcc_codec: (char, char, char, char),
@@ -97,9 +103,9 @@ pub struct MainThreadAsyncChannels
 {
     pub rx_progression_from_thread: mpsc::Receiver<f32>,
     pub tx_abort_signal_to_thread: mpsc::Sender<bool>,
+    pub tx_video_mode: mpsc::Sender<VideoModes>,
     pub tx_flip_update: mpsc::Sender<Option<RotateFlags>>,
     pub tx_rescale_update: mpsc::Sender<f32>,
-
     // pub rx_open_status: mpsc::Receiver<bool>,        // Could be useful, maybe not?
     pub tx_highgui_size_update: mpsc::Sender<f32>,
 }
@@ -118,6 +124,11 @@ impl MainThreadAsyncChannels
     // {
     //     self.rx_open_status.try_iter().last()
     // }
+    pub fn send_new_video_mode(&self, video_mode: VideoModes) -> Result<(), SendError<VideoModes>>
+    {
+        self.tx_video_mode.send(video_mode)?;
+        Ok(())
+    }
     pub fn send_new_gui_size(&self, new_gui_size: f32) -> Result<(), SendError<f32>>
     {
         self.tx_highgui_size_update.send(new_gui_size)?;
@@ -141,15 +152,19 @@ pub struct WorkerThreadAsyncChannels
 {
     pub tx_progression_to_main: mpsc::Sender<f32>,
     pub rx_abort_signal_from_main: mpsc::Receiver<bool>,
+    pub rx_video_mode: mpsc::Receiver<VideoModes>,
     pub rx_flip_update: mpsc::Receiver<Option<RotateFlags>>,
     pub rx_rescale_update: mpsc::Receiver<f32>,
-
     // pub tx_open_status: mpsc::Sender<bool>,              // Could be useful, maybe not?
     pub rx_highgui_size_update: mpsc::Receiver<f32>,
 }
 
 impl WorkerThreadAsyncChannels
 {
+    pub fn get_updated_video_mode(&mut self) -> Option<VideoModes>
+    {
+        self.rx_video_mode.try_iter().last()
+    }   
     pub fn get_last_size_update(&mut self) -> Option<f32>
     {
         self.rx_highgui_size_update.try_iter().last()
@@ -176,12 +191,7 @@ impl WorkerThreadAsyncChannels
     // }
 }
 
-pub enum UpdatedFrameSize
-{
-    NewGUiScale,
-    NewRescale,
-    NewRotation,
-}
+ 
 
 pub struct FrameSizeManager
 {

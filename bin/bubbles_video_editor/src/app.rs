@@ -1,7 +1,6 @@
 use std::ffi::OsStr;
 use std::iter::zip;
-
-use eframe::glow::MIN;
+ 
 use video_processor::VideoInfo;
 use video_processor::VideoProcessor;
 use video_processor::ProcessOptions;
@@ -14,6 +13,7 @@ const DOUBLE_SCALE_CHANGE: f32  = 2.0_f32;
 const HALF_SCALE_CHANGE: f32    = 0.5_f32;
 const VID_INFO_NAMES: [&'static str; 5] = ["• File name: ", "• Size: ", "• FourCC: ", "• FPS: ", "• Duration: "];
 const PLACE_HOLDER_FILELNAME: &str = "";
+
 
 #[derive(Default, Debug)]
 struct VidInfoGui
@@ -111,6 +111,27 @@ fn create_default_edit_path(file_name: &std::path::PathBuf, placer_holder: &str)
     processed_file_path
 }
 
+enum VideoMode
+{
+    Play(&'static str),
+    Pause(&'static str),
+}
+impl VideoMode
+{
+    const PLAY: VideoMode = VideoMode::Play("Play");
+    const PAUSE: VideoMode = VideoMode::Pause("Pause");
+    fn get_name(&self) -> &'static str 
+    {
+        match self
+        {
+            VideoMode::Pause(s) => s,
+            VideoMode::Play(s) => s,
+        }
+    }    
+}
+
+
+
 pub struct BubblesVideoEditor 
 {
     dropped_files: Vec<egui::DroppedFile>,
@@ -127,6 +148,7 @@ pub struct BubblesVideoEditor
     new_image_scale: f32,
     edit_file_name: std::path::PathBuf,
     video_info_gui: VidInfoGui,
+    next_video_mode: VideoMode,
 }
  
 impl Default for BubblesVideoEditor 
@@ -148,6 +170,7 @@ impl Default for BubblesVideoEditor
             new_image_scale: NO_SCALE_CHANGE,
             edit_file_name: std::path::PathBuf::default(), // could be a "new pathbuff...",
             video_info_gui: VidInfoGui::default(),
+            next_video_mode: VideoMode::PAUSE,
         }
     }
 }
@@ -365,6 +388,33 @@ impl BubblesVideoEditor
                 self.progress = RESET_PROGRESS;
                 self.app.dispatch_video_process(options);
             }
+            ui.add_enabled_ui(self.app.has_launched_process(), |ui|
+            {
+                if ui.button(self.next_video_mode.get_name()).clicked()
+                {   
+                    match self.next_video_mode
+                    {
+                        VideoMode::Pause(_) => 
+                        {
+                            if let Err(e) = self.app.pause_video()
+                            {
+                                println!("{e}");
+                            }
+                            self.next_video_mode = VideoMode::PLAY;
+                        }    
+                        VideoMode::Play(_) => 
+                        {
+                            if let Err(e) = self.app.resume_video()
+                            {
+                                println!("{e}");
+                            }
+                            self.next_video_mode = VideoMode::PAUSE;
+                        }    
+                    }
+                }
+            });
+
+
             if ui.add_enabled(self.app.has_launched_process(), egui::Button::new("Abort")).clicked()
             {
                 if self.app.try_abort()
@@ -396,6 +446,8 @@ impl BubblesVideoEditor
                     .animate(true);
                 ui.add(progress_bar);
             }
+
+            
         });
     
         if self.app.has_launched_process()
