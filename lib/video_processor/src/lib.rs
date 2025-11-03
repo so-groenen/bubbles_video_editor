@@ -14,7 +14,9 @@ pub use opencv::core::RotateFlags;
 use opencv::prelude::*;
 use opencv::{videoio, Result};
 
-const RESET_PROGRESS: f32 = 0_f32;
+const RESET_PROGRESS:    f32   = 0_f32;
+const GUI_DEFAULT_SCALE: f32   = 1_f32;
+const FRAME_DEFAULT_SCALE: f32 = 1_f32;
 
 pub use backend::helper_function::decode_fourcc;
 use std::sync::mpsc::SendError;
@@ -38,8 +40,8 @@ impl Default for VideoProcessor
     {
         VideoProcessor
         {
-            high_gui_scale: 0.25_f32,
-            re_scale: 1_f32,
+            high_gui_scale: GUI_DEFAULT_SCALE,
+            re_scale: FRAME_DEFAULT_SCALE,
             file_name: std::path::PathBuf::new(),
             thread_pool: VideoProcThreadPool::default(),
             my_video: None,

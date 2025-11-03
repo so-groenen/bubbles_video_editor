@@ -9,8 +9,6 @@ pub enum RotationRadio
     Forth(Option<RotateFlags>),
 }
 
-
-
 impl RotationRadio 
 {
     pub fn get(&self) -> Option<RotateFlags>

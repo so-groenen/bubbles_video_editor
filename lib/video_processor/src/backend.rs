@@ -45,7 +45,6 @@ trait VideoRenderer
 // "&dyn VideoRenderer = &mut play_mode" 
 // rather than using a smart pointer like "Box::new(dyn ..)", where we allocate new states every time
 // Then use a transition function to pass data from "PlayMode" to "PauseMode"
-
 struct PlayMode
 {
     counter: usize,
@@ -56,12 +55,20 @@ struct PlayMode
     frame_sizes: FrameSizeManager,
 }
 
-
 impl PlayMode
 {
     fn new(counter: usize, frame_count: usize, frame_sizes: FrameSizeManager) -> Self
     {
-        Self { counter, frame_count, frame: Mat::default(), result_frame: Mat::default(), preview_frame: Mat::default(), frame_sizes }
+        Self 
+        {
+            counter,
+            frame_count,
+            frame: Mat::default(),
+            result_frame: Mat::default(),
+            // result_frame2: None,
+            preview_frame: Mat::default(), 
+            frame_sizes
+        }
     }    
 }
 impl VideoRenderer for PlayMode
@@ -92,7 +99,11 @@ impl VideoRenderer for PlayMode
         match self.frame_sizes.get_rotation()
         {
             Some(rotation) => {rotate(&self.frame, &mut self.result_frame, rotation.code())?;}
-            None           => {self.result_frame = self.frame.clone();}
+            None           => 
+            {
+                // Result is now stored in result_frame.
+                opencv::core::swap(&mut self.frame, &mut self.result_frame)?;
+            }
         }
         opencv::imgproc::resize(&self.result_frame, &mut self.preview_frame, self.frame_sizes.get_preview(), 0.,0., opencv::imgproc::INTER_LINEAR)?;
         Ok(())    

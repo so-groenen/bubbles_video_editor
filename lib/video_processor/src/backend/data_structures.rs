@@ -299,12 +299,18 @@ impl HighGuiWindow
     }    
     pub fn show(&self,  mat: &impl opencv::core::ToInputArray) -> Result<(),opencv::Error>
     {
-        highgui::imshow(self.winname.as_str(), mat)?; 
+        if self.is_open() // window can be closed outside of the API!!
+        {
+            highgui::imshow(self.winname.as_str(), mat)?; 
+        }
         Ok(())
     }
     pub fn resize(&mut self, size: opencv::core::Size)-> Result<(),opencv::Error>
     {
-        highgui::resize_window_size(self.winname.as_str(), size)?;
+        if self.is_open() // window can be closed outside of the API!
+        {
+            highgui::resize_window_size(self.winname.as_str(), size)?;
+        }
         Ok(())
     }
     // Trick from https://stackoverflow.com/a/9321629

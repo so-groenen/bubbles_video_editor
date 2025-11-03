@@ -170,8 +170,7 @@ impl BubblesVideoEditor
     fn handle_video_edit_choice(&mut self, ui: &mut egui::Ui)
     {
         ui.label("Rotate video:");
-     
-  
+       
         ui.horizontal(|ui|
         {
             ui.radio_value(&mut self.flip_choice, RotationRadio::First(None), "No Rotation");
@@ -205,8 +204,8 @@ impl BubblesVideoEditor
         });
         ui.horizontal(|ui|
         {
-            ui.add_enabled_ui(self.app.has_video(), |ui|
-            {
+            // ui.add_enabled_ui(self.app.has_video() && !self.app.has_launched_process(), |ui|
+            // {
                 ui.label("Output path:");
                 if ui.text_edit_singleline(self.edit_file.get_buffer()).lost_focus()
                 {
@@ -215,12 +214,12 @@ impl BubblesVideoEditor
                  
                 if ui.button("Set output file").clicked() 
                 {
-                    if let Some(path) = rfd::FileDialog::new().set_file_name(self.edit_file.get_name()).add_filter("Video Format", &MP4_EXTENSIONS) .save_file() 
+                    if let Some(path) = rfd::FileDialog::new().set_directory(self.edit_file.get_dir()).set_file_name(self.edit_file.get_name()).add_filter("Video Format", &MP4_EXTENSIONS).save_file() 
                     {
                         self.edit_file.update_from_path(path);    
                     }
                 }
-            });
+            // });
             
         });
         // });
@@ -242,11 +241,11 @@ impl BubblesVideoEditor
     fn show_video_info(&mut self, ui: &mut egui::Ui)
     {
         egui::Grid::new("vid_info")
-        .num_columns(2)
-        .show(ui, |ui|
-        {
-            self.video_info_gui.show_rows(ui);
-        });
+            .num_columns(2)
+            .show(ui, |ui|
+            {
+                self.video_info_gui.show_rows(ui);
+            });
     }
 
     fn handle_video_processing(&mut self, ui: &mut egui::Ui) 
@@ -258,7 +257,7 @@ impl BubblesVideoEditor
                 ui.label("Current mode ");
                 match self.process_mode
                 {
-                    ProcessModes::PreviewOnly =>        ui.heading("Preview"),
+                    ProcessModes::PreviewOnly =>        ui.heading("Preview & Edit"),
                     ProcessModes::PreviewAndProcess =>  ui.heading("Output file"),
                 };
                 ui.end_row();
@@ -291,7 +290,9 @@ impl BubblesVideoEditor
                 self.progress = RESET_PROGRESS;
                 self.app.dispatch_video_process(options);
             }
-            ui.add_enabled_ui(self.app.has_launched_process(), |ui|
+
+            // PAUSE & PLAY
+            ui.add_enabled_ui(self.app.has_launched_process() && self.process_mode == ProcessModes::PreviewOnly, |ui|
             {
                 if ui.button(self.next_video_mode.get_name()).clicked()
                 {   
@@ -348,9 +349,7 @@ impl BubblesVideoEditor
                     .show_percentage()
                     .animate(true);
                 ui.add(progress_bar);
-            }
-
-            
+            }            
         });
     
         if self.app.has_launched_process()
@@ -424,7 +423,10 @@ impl eframe::App for BubblesVideoEditor
             //// Video editor ///
             ui.separator();
             ui.heading("Video Editor:");
-            self.handle_video_edit_choice(ui);
+            ui.add_enabled_ui(self.app.has_video() && self.process_mode == ProcessModes::PreviewOnly, |ui|
+            {
+                self.handle_video_edit_choice(ui);
+            });
 
 
             //// Video Processor ///

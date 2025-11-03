@@ -6,10 +6,20 @@ pub struct EditFile
     edit_file_buffer: String,
     edit_file_path: std::path::PathBuf,
     edit_file_name: String,
+    edit_file_dir: std::path::PathBuf,
 }
 impl EditFile
 {
     const DEFAULT_FILENAME: &str = "edit.mp4";
+    fn get_parent(path: &std::path::PathBuf) -> std::path::PathBuf
+    {
+        let default_directory = match std::env::current_dir()
+        {
+            Ok(cwd) => cwd,
+            Err(_)  => std::path::PathBuf::from(""),
+        };
+        path.parent().unwrap_or(&default_directory).to_path_buf()
+    }
     fn create_default_edit_path(file_name: &std::path::PathBuf, placer_holder: &str) -> std::path::PathBuf
     {
         let default_directory = match std::env::current_dir()
@@ -18,8 +28,8 @@ impl EditFile
             Err(_)  => std::path::PathBuf::from(""),
         };
 
-        let parent    = file_name.parent().unwrap_or(&default_directory);
-        let extension = file_name.extension().unwrap_or(OsStr::new("no_extension"));
+        let parent            = file_name.parent().unwrap_or(&default_directory);
+        let extension         = file_name.extension().unwrap_or(OsStr::new("no_extension"));
         let mut new_file_stem = file_name.file_stem().unwrap_or(OsStr::new("empty_file_name")).to_owned();
 
         println!("DEBUG: Filename {}", new_file_stem.to_str().expect("String not empty"));
@@ -35,11 +45,16 @@ impl EditFile
         let edit_file_path   = EditFile::create_default_edit_path(&file_path, placer_holder);
         let edit_file_buffer = String::from(edit_file_path.to_str().expect("edit_file_buffer: Could not Path to &str."));
         let edit_file_name   = edit_file_path.file_name().unwrap_or(OsStr::new(EditFile::DEFAULT_FILENAME)).display().to_string();
-        Self { edit_file_buffer, edit_file_path, edit_file_name }
+        let edit_file_dir    = EditFile::get_parent(&file_path);
+        Self { edit_file_buffer, edit_file_path, edit_file_name, edit_file_dir}
     }   
     pub fn get_buffer(&mut self) -> &mut String
     {
         &mut self.edit_file_buffer
+    }
+    pub fn get_dir(&self) -> &std::path::PathBuf
+    {
+        &self.edit_file_dir
     }
     pub fn get_path(&mut self) -> &std::path::PathBuf
     {
