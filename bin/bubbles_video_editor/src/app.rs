@@ -21,6 +21,8 @@ const HALF_SCALE_CHANGE: f32    = 0.5_f32;
 const MP4_EXTENSIONS:   [&'static str; 1] = ["mp4"];
 const PLACE_HOLDER_FILELNAME: &str        = "";
 
+const PREVIEW_COLOR: egui::Color32       = egui::Color32::from_rgb(120, 255, 120); // Lightish green
+const PROCESS_VIDEO_COLOR: egui::Color32 = egui::Color32::from_rgb(120, 255, 120);
 
 #[derive(PartialEq)]
 enum ProcessModes
@@ -71,7 +73,7 @@ impl Default for BubblesVideoEditor
             
             flip_choice: RotationRadio::First(None),
             process_mode: ProcessModes::PreviewOnly,
-            gui_scale: QUARTER_SCALE_CHANGE,
+            gui_scale: NO_SCALE_CHANGE,
             new_image_scale: NO_SCALE_CHANGE,
             video_info_gui: VidInfoGui::default(),
             next_video_mode: VideoMode::PAUSE,
@@ -178,9 +180,13 @@ impl BubblesVideoEditor
             ui.radio_value(&mut self.flip_choice, RotationRadio::Third(Some(RotateFlags::ROTATE_90_CLOCKWISE)), "Rotate 90 Clockwise");
             ui.radio_value(&mut self.flip_choice, RotationRadio::Forth(Some(RotateFlags::ROTATE_90_COUNTERCLOCKWISE)), "Rotate 90 Counter Clockwise");
         });
-        // ui.add_enabled_ui(!self.app.has_launched_process() && self.app.has_video(), |ui|// .is_video_loaded(), |ui|
-        // {
-        ui.label("Scale changer");
+
+        
+        ui.horizontal(|ui|{
+            ui.label("Video frame scale"); 
+            ui.label("(?)").on_hover_text("The scale of the video compared to the original size.").on_hover_cursor(egui::CursorIcon::Help);
+        });
+        
         ui.add(egui::Slider::new(&mut self.new_image_scale, 0.1..=2.0));
         ui.horizontal(|ui|
         {
@@ -204,25 +210,20 @@ impl BubblesVideoEditor
         });
         ui.horizontal(|ui|
         {
-            // ui.add_enabled_ui(self.app.has_video() && !self.app.has_launched_process(), |ui|
-            // {
-                ui.label("Output path:");
-                if ui.text_edit_singleline(self.edit_file.get_buffer()).lost_focus()
+            ui.label("Output path:");
+            if ui.text_edit_singleline(self.edit_file.get_buffer()).lost_focus()
+            {
+                self.edit_file.update_from_buffer();
+            }
+                
+            if ui.button("Set output file").clicked() 
+            {
+                if let Some(path) = rfd::FileDialog::new().set_directory(self.edit_file.get_dir()).set_file_name(self.edit_file.get_name()).add_filter("Video Format", &MP4_EXTENSIONS).save_file() 
                 {
-                    self.edit_file.update_from_buffer();
+                    self.edit_file.update_from_path(path);    
                 }
-                 
-                if ui.button("Set output file").clicked() 
-                {
-                    if let Some(path) = rfd::FileDialog::new().set_directory(self.edit_file.get_dir()).set_file_name(self.edit_file.get_name()).add_filter("Video Format", &MP4_EXTENSIONS).save_file() 
-                    {
-                        self.edit_file.update_from_path(path);    
-                    }
-                }
-            // });
-            
+            }            
         });
-        // });
 
         // This will dispatch new values to the processing thread, if process is launched!
         if self.process_mode == ProcessModes::PreviewOnly
@@ -250,48 +251,40 @@ impl BubblesVideoEditor
 
     fn handle_video_processing(&mut self, ui: &mut egui::Ui) 
     {
-        egui::Grid::new("process_mode")
+        // Select mode: edit-preview vs output:
+        ui.add_enabled_ui(self.app.has_video() && !self.app.has_launched_process(), |ui|
+        {
+            egui::Grid::new("process_mode")
             .num_columns(2)
             .show(ui, |ui|
             {
-                ui.label("Current mode ");
+                ui.label("Current mode: ");
                 match self.process_mode
                 {
-                    ProcessModes::PreviewOnly =>        ui.heading("Preview & Edit"),
-                    ProcessModes::PreviewAndProcess =>  ui.heading("Output file"),
+                    ProcessModes::PreviewOnly =>        ui.label(egui::RichText::new("Preview & Edit").heading().color(PREVIEW_COLOR)), 
+                    ProcessModes::PreviewAndProcess =>  ui.label(egui::RichText::new("Output file").heading().color(PROCESS_VIDEO_COLOR)), 
                 };
                 ui.end_row();
             });
-    
-    
+            
+            ui.horizontal(|ui|
+            {
+                ui.radio_value(&mut self.process_mode, ProcessModes::PreviewOnly, "Preview & edit");
+                ui.radio_value(&mut self.process_mode, ProcessModes::PreviewAndProcess, "Process & output video");
+            });
+        });
+        
+
         ui.horizontal(|ui|
         {
+            // Launch Button
             if ui.add_enabled(self.app.has_video() && !self.app.has_launched_process(), egui::Button::new("Launch")).clicked()
             {
-                let edit_file_path = self.edit_file.get_path().clone();
-                let re_scale       = match self.new_image_scale
-                {
-                    NO_SCALE_CHANGE => None,
-                    _               => Some(self.new_image_scale)
-                };
-                let flip           = self.flip_choice.get();
-                let should_process = self.process_mode == ProcessModes::PreviewAndProcess;
-                let preview        = true;
-                let gui_scale      = self.gui_scale;
-                let options = ProcessOptions
-                {
-                    gui_scale,
-                    edit_file_path,
-                    flip,
-                    should_process,
-                    preview,
-                    re_scale,
-                };
-                self.progress = RESET_PROGRESS;
+                let options = self.create_options();
                 self.app.dispatch_video_process(options);
             }
 
-            // PAUSE & PLAY
+            // Pause & Play button
             ui.add_enabled_ui(self.app.has_launched_process() && self.process_mode == ProcessModes::PreviewOnly, |ui|
             {
                 if ui.button(self.next_video_mode.get_name()).clicked()
@@ -318,7 +311,7 @@ impl BubblesVideoEditor
                 }
             });
 
-
+            // Abort button
             if ui.add_enabled(self.app.has_launched_process(), egui::Button::new("Abort")).clicked()
             {
                 if self.app.try_abort()
@@ -330,14 +323,8 @@ impl BubblesVideoEditor
                     println!("Failure sending message!"); 
                 }
             }
-            if ui.add_enabled(self.app.has_video() && !self.app.has_launched_process(), egui::RadioButton::new(self.process_mode == ProcessModes::PreviewOnly, "Preview")).clicked()
-            {
-                self.process_mode = ProcessModes::PreviewOnly;
-            }
-            if ui.add_enabled(self.app.has_video() && !self.app.has_launched_process(), egui::RadioButton::new(self.process_mode == ProcessModes::PreviewAndProcess, "Output file")).clicked()
-            {
-                self.process_mode = ProcessModes::PreviewAndProcess;
-            }
+            
+            // Progressbar
             if self.app.has_launched_process()
             {
                 if let Some(progression) = self.app.get_progression()
@@ -351,14 +338,18 @@ impl BubblesVideoEditor
                 ui.add(progress_bar);
             }            
         });
-    
-        if self.app.has_launched_process()
+        
+        // Video GUI Scale selector
+        ui.add_enabled_ui(self.app.has_video(), |ui| 
         {
+            ui.horizontal(|ui|{
+                ui.label("Preview Window scale"); 
+                ui.label("(?)").on_hover_text("The scale of the preview window compared to the original video size. Does not affect output file!").on_hover_cursor(egui::CursorIcon::Help);
+            });
+
+            ui.add(egui::Slider::new(&mut self.gui_scale, 0.1..=2.0));
             ui.horizontal(|ui|
             {
-                ui.label("Preview Window Size:");
-                ui.add(egui::Slider::new(&mut self.gui_scale, 0.1..=2.0));
-    
                 ui.label("Presets:");
                 if ui.button("0.25").clicked()
                 {
@@ -377,7 +368,8 @@ impl BubblesVideoEditor
                     self.gui_scale = DOUBLE_SCALE_CHANGE;
                 }
             });
-        }
+        });
+
         if let Err(e) = self.app.set_gui_scale(self.gui_scale)
         {
             println!("Error: {e}");
@@ -393,6 +385,31 @@ impl BubblesVideoEditor
                 },
             } 
         }
+    }
+
+    fn create_options(&mut self) -> ProcessOptions
+    {
+        let edit_file_path = self.edit_file.get_path().clone();
+        let re_scale       = match self.new_image_scale
+        {
+            NO_SCALE_CHANGE => None,
+            _               => Some(self.new_image_scale)
+        };
+        let flip           = self.flip_choice.get();
+        let should_process = self.process_mode == ProcessModes::PreviewAndProcess;
+        let preview        = true;
+        let gui_scale      = self.gui_scale;
+        let options = ProcessOptions
+        {
+            gui_scale,
+            edit_file_path,
+            flip,
+            should_process,
+            preview,
+            re_scale,
+        };
+        self.progress = RESET_PROGRESS;
+        options
     }
 }
 

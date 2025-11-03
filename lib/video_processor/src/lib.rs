@@ -177,7 +177,7 @@ impl VideoProcessor
         {
             let (tx_progression_to_main,    rx_progression_from_thread) = mpsc::channel();
             let (tx_abort_signal_to_thread, rx_abort_signal_from_main)  = mpsc::channel();
-            let (tx_video_mode,             rx_video_mode)          = mpsc::channel();
+            let (tx_video_mode,             rx_video_mode)              = mpsc::channel();
             let (tx_flip_update,            rx_flip_update)             = mpsc::channel();
             let (tx_rescale_update,         rx_rescale_update)          = mpsc::channel();
             // let (tx_open_status,            rx_open_status)             = mpsc::channel();
